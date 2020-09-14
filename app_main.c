@@ -123,7 +123,7 @@ int g_hwwatch_pid=-1;
 int g_pwr_hw_ver = 0;
 #endif
 extern int ppp_conn_flag;
-extern unsigned char g_modem_comp_id;
+extern unsigned short get_g_modem_comp_id();
 extern char g_gateway_ip[20];
 extern unsigned short g_ip_report_time;
 extern unsigned char g_lte_status;
@@ -322,6 +322,7 @@ void libimg_libray_size_check();
 #ifdef DEF_ENTIMORE_IP_USE
 int ethernet_link_connect_check();
 void Entimore_data_link_resetup(int idx);
+
 #endif
 
 Vpn_Config_Data g_vpn_config_data;
@@ -391,6 +392,10 @@ extern void send_FileMsg_to_BroadcastThread(int messageType, char* filePath, int
 extern void sendBroadcastMsgFilePlay(int messageType, char* filePath, int groupNumber, int useAMP, int use422);
 extern int readPowerBoard_Ver_for_WatchDog();
 extern void setPowerBoardWatchdog(int mode, int OnOff);
+extern uint16_t get_check_digital_dif();
+extern uint16_t get_check_analog_422();
+extern int get_IP_Ethernet_Conf();
+extern int get_IP_M2M_Conf();
 
 #if 0
 extern void Timer_Test(timer_t* timerid, void (*Func)(),long msecInterval);
@@ -436,14 +441,14 @@ void sigint_handler( int signo)
 {
 	kprintf( "Modem CFUN SigAlarm Alert!!\n");
 	if(CFUN_flag == 1){
-	 	if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 0)
+	 	if(get_IP_Ethernet_Conf() == 0)
 	 		rebootSystemCDMA(1);
 		CFUN_flag = 2;
 	}
 /*
     kprintf( "Modem CFUN SigAlarm Alert!! g_mdm_rst_count= %d\n",g_mdm_rst_count);
 	if(CFUN_flag == 1){
-	 	if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 0){
+	 	if(get_IP_Ethernet_Conf() == 0){
 #ifdef DEF_MODEM_RESTART_NEW_PROC
 			if(g_mdm_rst_count >= 3){
 				CFUN_flag = 5;				
@@ -720,6 +725,7 @@ int main(int argc, char **argv)
 {
 	int r;
 	app_thr_obj *tObj = &iapp->mObj;
+	setbuf(stdout, NULL);
 
 	printf("====================================================================\n");
 	printf("  Version : MX400B-01A\n");
@@ -886,8 +892,8 @@ int main(int argc, char **argv)
 
 	kprintf("gRegisters.Equipment_IP_Address.Equipment_Server_IP.Equipment_Server_IP addr :%s\n",get_server_ip());
 
-	kprintf("gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M = %d\n",gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M);
-	kprintf("gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet = %d\n",gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet);
+	kprintf("gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M = %d\n",get_IP_M2M_Conf());
+	kprintf("gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet = %d\n",get_IP_Ethernet_Conf());
 
 	IP_Broadcast_Thread_Generation(tObj);
 
@@ -929,7 +935,7 @@ int main(int argc, char **argv)
 	write_app_sw_ver_to_broadcast();
 	data_buffer_save_n_send_bt80(2, 0, 0);
 #ifdef DEF_NET_TIME_USE
-	if((CFUN_flag == 5) && (gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1)){
+	if((CFUN_flag == 5) && (get_IP_Ethernet_Conf() == 1)){
 		/*
 		char loc_ip_addr[100];
 		memset(loc_ip_addr,0,sizeof(loc_ip_addr));
@@ -1429,7 +1435,7 @@ int socket_client_main()
 #else
 		sleep(2);
 #endif
-		if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1)
+		if(get_IP_Ethernet_Conf() ==1)
 		{
 			if(strcmp(get_server_ip(),"0.0.0.0") == 0) 
 			{
@@ -1598,7 +1604,7 @@ int socket_server_main()
 		if (setsockopt(client_sockfd, SOL_TCP, TCP_KEEPINTVL, &keep_intv, sizeof(keep_intv)) < 0)
 			printf("setsockopt(SO_KEEPIDLE) failed\n");
 #endif				
-		if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1)
+		if(get_IP_Ethernet_Conf() == 1)
 		{
 			if((n = read(client_sockfd, buf, SOC_MAXRECVBUF)) <= 0)
 			{
@@ -1775,6 +1781,7 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		sprintf(g_str_guid,"%s",ser_ip->guid);		
 		g_rec_pre_time = ser_ip->pre_time;
 		kprintf("==============> g_rec_pre_time = %d\n",g_rec_pre_time);
+		
 		memset(ack_play_buf,0,24);
 		struct ip_play_ack_data *loc_play_ack;
 		loc_play_ack = (struct ip_play_ack_data *)ack_play_buf;
@@ -1782,7 +1789,7 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		loc_play_ack->try_count = ser_ip->try_count;
 		loc_play_ack->report_seq = ser_ip->report_seq;
 		ack_reponse_to_server_by_socket_24(client_sockfd,ack_play_buf);
-		
+
 		char temp_log[IP_LOG_SEND_MSG_LEN]={0,};
 		sprintf(temp_log,"CFIL7,%s,%s,SAVED LIVE AUDIO FILE BROADCASTING REQUEST,%s",gMyCallNumber,g_str_guid,ser_ip->file_name);				
 		udp_message_data_send_proc(temp_log,5);
@@ -1878,7 +1885,7 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		g_try_count = g_srv_broad_mx->try_count = ser_ip->try_count;
 		sprintf(g_srv_broad_mx->file_name,"%d",ser_ip->siren_id);
 		//kprintf("====================> SIREN_PLAY_CMD report_seq = %d, send_date= %s\n",g_srv_broad_mx->report_seq,g_srv_broad_mx->send_date);
-
+		
 		memset(ack_play_buf,0,24);
 		struct ip_play_ack_data *loc_play_ack;
 		loc_play_ack = (struct ip_play_ack_data *)ack_play_buf;
@@ -1886,7 +1893,7 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		loc_play_ack->try_count = ser_ip->try_count;
 		loc_play_ack->report_seq = ser_ip->report_seq;
 		ack_reponse_to_server_by_socket_24(client_sockfd,ack_play_buf);
-
+				
 		char file_name[30];
 		if((siren_id == 0) || (siren_id == 1) || (siren_id == 2) || (siren_id == 5)){
 			sprintf(file_name,"%d.mp3",siren_id);
@@ -1953,8 +1960,8 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		set_g_SunCha_Mode(CK_OFF);
 				
 		if(getCurrentBroadcastState() != BOARDCAST_STATE_NONE){
-			g_rcv_flag_from_ip_server = 1;
-			stop_currently_runing_service(client_sockfd,2);	
+				g_rcv_flag_from_ip_server = 1;
+				stop_currently_runing_service(client_sockfd,2);	
 		}
 		struct server_braod_mx_data *ser_ip;
 		ser_ip = (struct server_braod_mx_data *)buf;
@@ -1963,7 +1970,7 @@ void Recieve_Command_from_IP_Server_process(int client_sockfd, char *buf)
 		sprintf(g_str_guid,"%s",ser_ip->guid);
 		g_try_count = ser_ip->try_count;
 		//printf("----------------->>> g_try_count= %d\n",g_try_count);
-		
+
 		memset(ack_play_buf,0,24);
 		struct ip_play_ack_data *loc_play_ack;
 		loc_play_ack = (struct ip_play_ack_data *)ack_play_buf;
@@ -2022,9 +2029,8 @@ void Read_IP_File_List(char *s_sdata)
 void udp_message_data_send_proc(char *log_data, int cmd_id)
 {
 #ifndef USE_SUJAWON_DEF	
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
-		if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M ==1)){
-
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
+		if((get_IP_Ethernet_Conf() ==1) || (get_IP_M2M_Conf() ==1)){
 /*
 			unsigned char loc_cmd_check=0;
 			if((g_lte_status == 1) && (cmd_id == 1)) loc_cmd_check = 1;
@@ -2036,7 +2042,6 @@ void udp_message_data_send_proc(char *log_data, int cmd_id)
 
 			if(loc_cmd_check == 0) return;
 */
-
 			char udp_buf[TOT_IP_SEND_MSG_LEN];
 			memset(udp_buf,0,TOT_IP_SEND_MSG_LEN);
 			struct ip_report_message *snd_ip_data;
@@ -2063,8 +2068,8 @@ void udp_message_data_send_proc(char *log_data, int cmd_id)
 			udp_client_report_data_save_to_file(udp_buf);
 		}
 	}
-	else if((g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT) || (g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT)){
-		if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M ==1)){
+	else if((get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT) || (get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT)){
+		if((get_IP_Ethernet_Conf() ==1) || (get_IP_M2M_Conf() ==1)){
 	/*		
 			unsigned char loc_cmd_check=0;
 			if((g_lte_status == 1) && (cmd_id == 1)) loc_cmd_check = 1;
@@ -2434,7 +2439,7 @@ void stop_currently_runing_service(int client_sockfd,int r_idx)
 	else g_pri_stop_flag = 0;
 #ifndef USE_SUJAWON_DEF	
 #if 0
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT)
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT)
 	{
 		if(client_sockfd != -1){
 			if(write(client_sockfd, loc_buf, SOC_MAXBUF) <= 0)
@@ -2450,13 +2455,13 @@ void stop_currently_runing_service(int client_sockfd,int r_idx)
 int udp_client_report(char buf[TOT_IP_SEND_MSG_LEN])
 {
 #ifndef USE_SUJAWON_DEF	
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
-		if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M ==1))
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
+		if((get_IP_Ethernet_Conf() ==1) || (get_IP_M2M_Conf() ==1))
 		{
 			send_udp_client_report_data(buf);
 		}		
 	}
-	else if((g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT) || (g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT)){
+	else if((get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT) || (get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT)){
 		send_udp_client_report_data(buf);
 	}
 #endif
@@ -2672,6 +2677,7 @@ int socket_m2m_client_main()
 #ifdef DEF_ENTIMORE_IP_USE	
 	sleep(1);
 #endif	
+
 	while(1){
 		if(g_cdma_reset_flag == 1) return;
 		g_ip_timeout = 0;
@@ -2681,7 +2687,7 @@ int socket_m2m_client_main()
 			sleep(60);
 			continue;
 		}
-		//kprintf(".........................111111111111111111111111\n");
+		
 		if((g_mtm_server_cockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1)	
 		{
 			kprintf("socket_m2m_client_main() : socket error : ");
@@ -2696,7 +2702,7 @@ int socket_m2m_client_main()
 		
 		client_len = sizeof(serveraddr);
 #ifdef DEF_ENTIMORE_IP_USE		
-		if((g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){
+		if((get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){
 
 			int enable = 1;
 			if (setsockopt(g_mtm_server_cockfd, SOL_SOCKET, SO_KEEPALIVE, &enable, sizeof(int)) < 0)
@@ -2724,7 +2730,6 @@ int socket_m2m_client_main()
 			sleep(5);			
 			continue;
 		}
-		//kprintf(".........................33333333333333333333333333\n");
 		FD_ZERO(&readfds);
 		FD_SET(g_mtm_server_cockfd, &readfds);
 
@@ -2741,18 +2746,20 @@ int socket_m2m_client_main()
 			int loc_flag = 1;
 			tmp_fds = readfds;
 #ifdef DEF_ENTIMORE_IP_USE		
-			if((g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){				
-		        tv.tv_sec = g_ip_report_time+5;
-		        tv.tv_usec = 0;
+			if((get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){				
+				tv.tv_sec = g_ip_report_time+5;
+				tv.tv_usec = 0;
 			}
 			else{				
-		        tv.tv_sec = g_ip_report_time+1;
-		        tv.tv_usec = 0;
+				tv.tv_sec = g_ip_report_time+1;
+				tv.tv_usec = 0;
 			}
 #else
 			 tv.tv_sec = g_ip_report_time+1;
-		     tv.tv_usec = 0;
+			 tv.tv_usec = 0;
 #endif
+
+
 	        int loc_state = select(g_mtm_server_cockfd + 1, &tmp_fds, (fd_set *)0, (fd_set *)0, &tv);
 	        switch(loc_state)
 	        {
@@ -2786,12 +2793,12 @@ int socket_m2m_client_main()
 			else if(loc_flag == 2){
 				if(g_ip_timeout < 1) continue;
 				else break;
-			}			
+			}
 			Recieve_Command_from_IP_Server_process(g_mtm_server_cockfd, locbuf);	
 		}
 		thread_delete(_tobjM2mIpRcvThread);
 #ifdef DEF_ENTIMORE_IP_USE		
-		if((g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){
+		if((get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)){
 			pthread_t soc_thread_t;
 			if (pthread_create(&soc_thread_t, NULL, &ENT_Socket_closed_proc, (void *)NULL) < 0)
 			{
@@ -2801,11 +2808,11 @@ int socket_m2m_client_main()
 		}
 		else{
 			if(g_mtm_server_cockfd != -1)
-				close(g_mtm_server_cockfd);	
+				close(g_mtm_server_cockfd); 
 		}
 #else		
 		if(g_mtm_server_cockfd != -1)
-			close(g_mtm_server_cockfd);	
+			close(g_mtm_server_cockfd); 
 #endif		
 		g_mtm_server_cockfd = -1;
 	}
@@ -2834,7 +2841,7 @@ void M2mIpReg_Send_Proc()
 			sleep(5);			
 		}
 		
-		//if(gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M ==1)
+		//if(get_IP_M2M_Conf() ==1)
 		{
 			memset(locbuf, 0x00, SOC_REGLEN);	
 			struct ip_req_data *loc_req = (struct ip_req_data *) locbuf;
@@ -2850,7 +2857,7 @@ void M2mIpReg_Send_Proc()
 			{
 				kprintf("[%s] write error: %s\n",__FUNCTION__,strerror(errno));
 				init_client_reg_ip = 0;
-				continue;
+				break;
 			}	
 			init_client_reg_ip = 1;
 			
@@ -2900,7 +2907,7 @@ void ip_status_report_proc(int t_status)
 	g_t_status = t_status;
 	kprintf("ip_status_report_proc() t_status= %d\n",t_status);
 #ifndef USE_SUJAWON_DEF		
-	if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M ==1)){
+	if((get_IP_Ethernet_Conf() ==1) || (get_IP_M2M_Conf() ==1)){
 		sendServerIpStatusMsg(t_status);
 	}
 #endif  //USE_SUJAWON_DEF	
@@ -2917,7 +2924,7 @@ void socket_ip_status_report_thread_proc()
 	int init_client_reg_ip = 0;
 
 		g_ip_sts_flag = 1;
-	//if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1)
+	//if(get_IP_Ethernet_Conf() ==1)
 	{
 		if(strcmp(get_server_ip(),"0.0.0.0") == 0) 
 		{
@@ -3092,7 +3099,7 @@ int Sujawon_server_main()
 		client_sockfd = accept(server_sockfd, (struct sockaddr *)&clientaddr,(socklen_t*)&client_len);
 		kprintf("New Client Connect : %s\n", inet_ntoa(clientaddr.sin_addr));
 		sprintf(g_suja_ser_ip,"%s",inet_ntoa(clientaddr.sin_addr));
-		if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1)
+		if(get_IP_Ethernet_Conf() == 1)
 		{
 			if((n = read(client_sockfd, buf, SOC_MAXRECVBUF)) <= 0)
 			{
@@ -3243,7 +3250,7 @@ void suja_send_to_server_ip_result_data_proc(char *data,int len)
 	kprintf("[%s] len = %d!!!\n",__FUNCTION__,len);
 	int init_client_reg_ip = 0;
 
-	if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet ==1)
+	if(get_IP_Ethernet_Conf() ==1)
 	{
 #if 1	//for test
 		if(strcmp(get_server_ip(),"0.0.0.0") == 0) 
@@ -3298,7 +3305,7 @@ int get_system_MyIPAddress(char *ip_addr,char *nic_name)
 		return 0;
 	}
 
-	strcpy(ifr.ifr_name, nic_name);
+	strcpy(ifr.ifr_name, nic_name);	
 
 	if(strcmp(nic_name,"eth0") == 0){
 		if (ioctl(sock, SIOCGIFFLAGS, &ifr)< 0)    
@@ -3324,7 +3331,7 @@ int get_system_MyIPAddress(char *ip_addr,char *nic_name)
 	}
 
 	sin = (struct sockaddr_in*)&ifr.ifr_addr;
-	strcpy(ip_addr, inet_ntoa(sin->sin_addr));
+	strcpy(ip_addr, inet_ntoa(sin->sin_addr));	
 	
 	close(sock);
 
@@ -3436,14 +3443,14 @@ void for_modem_init_timer_proc()
 {
 	kprintf("[%s] timer expired!!!\n",__FUNCTION__);
 	
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
-		if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) modem_cdma_init(1);
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
+		if(get_IP_Ethernet_Conf() == 1) modem_cdma_init(1);
 		else modem_cdma_init(0);
 	}	
-	else if(g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT){
+	else if(get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT){
 		Telradin_modem_init();
 	}	
-	else if(g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT){
+	else if(get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT){
 		mtom_modem_init();
 		
 	}
@@ -3453,10 +3460,10 @@ void for_modem_init_timer_proc()
 		startThreadTelSMS(CK_ON);
 		g_mdm_rst_count = 0;
 		rst_count_add();
-		if(g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT){
+		if(get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT){
 			ip_link_check_route_setting(0,DEF_TELADIN_GW,DEF_TELADIN_IP_DEVICE);
 		}
-		else if(g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT){
+		else if(get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT){
 			sleep(1);
 			char loc_ip_addr[50];
 			int loc_ip_ret_ppp0 = get_system_MyIPAddress(loc_ip_addr,DEF_MTOM_IP_DEVICE);
@@ -3466,7 +3473,7 @@ void for_modem_init_timer_proc()
 			ip_link_check_route_setting(0,DEF_MTOM_GW,DEF_MTOM_IP_DEVICE);
 		}
 #ifdef DEF_ENTIMORE_IP_USE		
-		if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
+		if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
 			sleep(1);
 			char loc_ip_addr[50];
 			int loc_ip_ret_ppp0 = get_system_MyIPAddress(loc_ip_addr,DEF_ENTIMORE_IP_DEVICE);
@@ -3621,8 +3628,8 @@ int ethernet_link_connect_check()
 	}
 	return 0;	
 }
-
 #endif
+
 
 void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device_name)
 {
@@ -3657,7 +3664,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 				g_route_chg_flag = 1;
 				kprintf("Setting Route table g_ip_route_id eth0\n");
 			}
-			else if(g_ip_route_id == 1){
+			else if(g_ip_route_id == 1){				
 				modem_system_route_delete(gw_address,device_name);
 				if(id == 1){
 					eth0_system_route_add();
@@ -3676,7 +3683,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 				g_route_chg_flag = 1;
 				kprintf("Change Route table g_ip_route_id %s -> eth0\n",device_name);
 		
-				if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+				if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 					if(g_mtm_server_cockfd != -1)
 						close(g_mtm_server_cockfd);	
 					thread_delete(_tobjM2mIpSndThread);
@@ -3707,7 +3714,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 				kprintf("Change Route table g_ip_route_id eth0 -> %s\n",device_name);
 				st_enti_dual_gw_check_flag = 0;
 	
-				if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+				if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 					if(g_ip_route_id == 0){
 						if(g_mtm_server_cockfd != -1)
 							close(g_mtm_server_cockfd);	
@@ -3723,7 +3730,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 	}
 	else{
 		if(id == 0) kprintf("My system %s IP Address is not setting\n",device_name);	
-		if(g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT){
+		if(get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT){
 			if((CFUN_flag < 5) && (CFUN_flag == 0)) system(" udhcpc -i eth1");
 			if((loc_ip_ret_eth0 == 1) && (loc_link_up_down_ret == 1)){				
 				if(id == 0){		
@@ -3750,7 +3757,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 					g_ip_route_id = 0;
 					kprintf("Change Route table g_ip_route_id %s -> eth0\n",device_name);
 		
-					if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+					if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 						if(g_mtm_server_cockfd != -1)
 							close(g_mtm_server_cockfd);
 						thread_delete(_tobjM2mIpSndThread);
@@ -3784,12 +3791,12 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 				}				
 			}
 		}
-		else if(g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT){
+		else if(get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT){
 			if((loc_ip_ret_eth0 == 1) && (loc_link_up_down_ret == 1)){				
-				if(id == 0){	
+				if(id == 0){		
 					eth0_system_route_add();
 					g_ip_route_id = 0;
-					g_route_chg_flag = 1;
+					g_route_chg_flag = 1;					
 					kprintf("Setting Route table g_ip_route_id eth0\n");
 				}
 				else if(g_ip_route_id == 1){
@@ -3809,7 +3816,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 					g_ip_route_id = 0;
 					kprintf("Change Route table g_ip_route_id %s -> eth0\n",device_name);
 		
-					if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+					if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 						if(g_mtm_server_cockfd != -1)
 							close(g_mtm_server_cockfd);
 						thread_delete(_tobjM2mIpSndThread);
@@ -3832,7 +3839,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 			}
 		}
 #ifdef DEF_ENTIMORE_IP_USE	
-		else if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
+		else if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
 			if((loc_ip_ret_eth0 == 1) && (loc_link_up_down_ret == 1)){				
 				if(id == 0){		
 					eth0_system_route_add();
@@ -3857,7 +3864,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 					g_ip_route_id = 0;
 					kprintf("Change Route table g_ip_route_id %s -> eth0\n",device_name);
 		
-					if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+					if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 						if(g_mtm_server_cockfd != -1)
 							close(g_mtm_server_cockfd);
 						thread_delete(_tobjM2mIpSndThread);
@@ -3888,7 +3895,7 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 		if((g_ip_route_id == 0) && (g_route_chg_flag ==1)){			
 			int ret_d = getrouteState();
 			if(ret_d == 2){
-				modem_system_route_delete(gw_address,device_name);	
+				modem_system_route_delete(gw_address,device_name);			
 			}
 			else if(ret_d < 1) kprintf("ip_link_check_route_setting() default gateway not found\n");
 			g_route_chg_flag = 0;
@@ -3896,9 +3903,9 @@ void ip_link_check_route_setting(unsigned char id,char *gw_address, char *device
 		else if((g_ip_route_id == 1) && (g_route_chg_flag ==1)){			
 			int ret_d = getrouteState();
 			if(ret_d == 2){
-				if((st_enti_dual_gw_check_flag < 5) || (g_modem_comp_id != MODEM_TYPE_ENTIMORE_PRODUCT))
+				if((st_enti_dual_gw_check_flag < 5) || (get_g_modem_comp_id() != MODEM_TYPE_ENTIMORE_PRODUCT))
 				{		
-					if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT) st_enti_dual_gw_check_flag++;
+					if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT) st_enti_dual_gw_check_flag++;
 					eth0_system_route_delete();
 				}
 				g_route_chg_flag = 0;
@@ -3955,7 +3962,6 @@ void eth0_system_route_delete()
 	sprintf(loc_route_add_str,"route del default gw %s dev eth0",g_gateway_ip);
 	system(loc_route_add_str);
 }
-
 
 #ifdef DEF_ENTIMORE_IP_USE
 void Entimore_data_link_resetup(int idx)
@@ -4019,7 +4025,7 @@ int getrouteState()
 void get_alarm_n_warning_Read_from_DB()
 {
 #ifdef DEF_ENTIMORE_IP_USE		
-	if((g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)) sleep(7);
+	if((get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT) && (g_ip_route_id == 1)) sleep(7);
 	else sleep(3);
 #else
 	sleep(3);
@@ -4048,7 +4054,7 @@ void get_alarm_n_warning_Read_from_DB()
 		g_Speaker_alarm = get_system_status_info_read_from_server(6);
 		kprintf("get_alarm_n_warning_Read_from_DB() g_Speaker_alarm= %d\n",g_Speaker_alarm);
 	}
-	if((gRegisters.Communication_info.Communication_info.bit.Comm_con5_422_Analog == CK_USE) || (gRegisters.Communication_info.Communication_info.bit.Comm_con5_422_Digital == CK_USE)){
+	if((get_check_analog_422() == CK_USE) || (get_check_digital_dif() == CK_USE)){
 		g_DIF_alarm = get_system_status_info_read_from_server(7);
 		kprintf("get_alarm_n_warning_Read_from_DB() g_DIF_alarm= %d\n",g_DIF_alarm);
 	}
@@ -4454,11 +4460,11 @@ void water_level_ment_play_processing(void *ptr)
 
 void Modem_Initial_Processing()
 {
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
-		if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) modem_cdma_init(1);
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
+		if(get_IP_Ethernet_Conf() == 1) modem_cdma_init(1);
 		else modem_cdma_init(0);
 	}	
-	else if(g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT){	
+	else if(get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT){	
 		int loop_i =0,ii;
 		if(g_mdm_rst_count == 0) loop_i = 1;
 		else loop_i = 2;
@@ -4468,7 +4474,7 @@ void Modem_Initial_Processing()
 			if(g_mdm_rst_count == 1) sleep(10);
 		}
 	}	
-	else if(g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT){
+	else if(get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT){
 		mtom_modem_init();
 	}
 
@@ -4477,11 +4483,11 @@ void Modem_Initial_Processing()
 
 void Modem_ip_link_setup()
 {
-	if(g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT){
+	if(get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT){
 		if(CFUN_flag == 0)
 			ip_link_check_route_setting(0,DEF_TELADIN_GW,DEF_TELADIN_IP_DEVICE);
 	}	
-	else if(g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT){
+	else if(get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT){
 		if(CFUN_flag == 0){
 			char loc_ip_addr[50];
 			int loc_ip_ret_ppp0 = get_system_MyIPAddress(loc_ip_addr,DEF_MTOM_IP_DEVICE);
@@ -4492,7 +4498,7 @@ void Modem_ip_link_setup()
 		}
 	}
 #ifdef DEF_ENTIMORE_IP_USE		
-	else if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
+	else if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
 		if(CFUN_flag == 0){
 			char loc_ip_addr[50];
 			int loc_ip_ret_ppp0 = get_system_MyIPAddress(loc_ip_addr,DEF_ENTIMORE_IP_DEVICE);
@@ -4505,6 +4511,7 @@ void Modem_ip_link_setup()
 		}
 	}
 #endif	
+	
 }
 
 void IP_Broadcast_Thread_Generation(app_thr_obj *tObj)
@@ -4512,7 +4519,7 @@ void IP_Broadcast_Thread_Generation(app_thr_obj *tObj)
 #ifndef USE_SUJAWON_DEF
 	//init_encode_decode();
 
-	if((gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1) || (gRegisters.Communication_info.Communication_info.bit.Comm_con12_IP_M2M == 1)){
+	if((get_IP_Ethernet_Conf() == 1) || (get_IP_M2M_Conf() == 1)){
 		kprintf("Entimore Modem IP Broadcation Thread Run!!!\n");					
 		
 		if(thread_create(_tobjM2mIpSndThread, (void *) &socket_m2m_client_main, APP_THREAD_PRI, NULL) < 0) {
@@ -4526,7 +4533,7 @@ void IP_Broadcast_Thread_Generation(app_thr_obj *tObj)
 		} 
 	}
 #else
-	if(gRegisters.Communication_info.Communication_info.bit.Comm_con7_Ethernet == 1){
+	if(get_IP_Ethernet_Conf() == 1){
 		if(thread_create(tObj, (void *) &Sujawon_server_main, APP_THREAD_PRI, NULL) < 0) {
 				eprintf("create thread\n");
 		}
@@ -4593,7 +4600,7 @@ void send_SMS_message_for_door_open_close(int on_off_flag)
 		else sprintf(send_data,"%s µµ¾î(0-¿­¸², 1-´ÝÈû)= %d",gRegisters.Equipment_Vill_name.bill_Name,on_off_flag);
 	}
 #endif	
-	if(g_modem_comp_id == MODEM_TYPE_ENTIMORE_PRODUCT){
+	if(get_g_modem_comp_id() == MODEM_TYPE_ENTIMORE_PRODUCT){
 		int i;
 		char loc_temp[3];
 		memset(hex_send_data,0,180);
@@ -4603,7 +4610,7 @@ void send_SMS_message_for_door_open_close(int on_off_flag)
 		}
 		send_SMS_Message(hex_send_data,0,SMS_DOOR_ID);
 	}
-	else if((g_modem_comp_id == MODEM_TYPE_TELADIN_PRODUCT) || (g_modem_comp_id == MODEM_TYPE_MTOM_PRODUCT)) send_SMS_Message(send_data,0,SMS_DOOR_ID);
+	else if((get_g_modem_comp_id() == MODEM_TYPE_TELADIN_PRODUCT) || (get_g_modem_comp_id() == MODEM_TYPE_MTOM_PRODUCT)) send_SMS_Message(send_data,0,SMS_DOOR_ID);
 }
 
 #endif
